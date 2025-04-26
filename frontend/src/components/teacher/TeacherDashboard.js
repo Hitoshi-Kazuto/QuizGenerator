@@ -275,7 +275,7 @@ function TeacherDashboard() {
       
       yPos += splitQuestionText.length * 7;
       
-      if (q.type === 'mcq' && q.options) {
+      if ((q.type === 'mcq' || q.type === 'multi_answer') && q.options) {
         doc.setFontSize(optionFontSize);
         doc.setFont('helvetica', 'normal');
         
@@ -700,6 +700,11 @@ function TeacherDashboard() {
                           <div className="quiz-preview-option">B. False</div>
                         </>
                       )}
+                      {q.type === 'multi_answer' && q.options && q.options.map((option, optIndex) => (
+                        <div key={optIndex} className="quiz-preview-option">
+                          {String.fromCharCode(65 + optIndex)}. {option}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
