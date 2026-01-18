@@ -9,6 +9,13 @@ const StudentDashboard = () => {
   const navigate = useNavigate();
   const [quizzes, setQuizzes] = useState([]);
   const [currentQuiz, setCurrentQuiz] = useState(null);
+  const [score, setScore] = useState(null);
+  const [error, setError] = useState('');
+  const [accessCode, setAccessCode] = useState('');
+  const [user, setUser] = useState(null);
+  const [attempts, setAttempts] = useState([]);
+  const [selectedQuiz, setSelectedQuiz] = useState(null);
+  const [showScore, setShowScore] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedAnswers, setSelectedAnswers] = useState({});
