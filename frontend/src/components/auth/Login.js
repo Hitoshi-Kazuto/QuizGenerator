@@ -7,7 +7,7 @@ import { API_BASE_URL } from '../../config';
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('student');
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -23,7 +23,7 @@ function Login() {
       formData.append('password', password);
 
       const response = await axios.post(`${API_BASE_URL}/token`, formData);
-      
+
       // Store the token and user type
       localStorage.setItem('token', response.data.access_token);
       localStorage.setItem('userType', response.data.user_type);
@@ -47,14 +47,14 @@ function Login() {
       <div className="auth-nav">
         <Link to="/" className="auth-logo">TestifyAI</Link>
       </div>
-      
+
       <div className="auth-content">
         <div className="auth-box">
           <h2>Welcome Back</h2>
           <p className="auth-subtitle">Sign in to your TestifyAI account</p>
-          
+
           {error && <div className="error-message">{error}</div>}
-          
+
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-group">
               <label htmlFor="email">Email</label>
@@ -67,7 +67,7 @@ function Login() {
                 required
               />
             </div>
-            
+
             <div className="form-group">
               <label htmlFor="password">Password</label>
               <input
@@ -79,8 +79,8 @@ function Login() {
                 required
               />
             </div>
-            
-            
+
+
             <div className="form-options">
               <div className="remember-me">
                 <input type="checkbox" id="remember" />
@@ -88,16 +88,16 @@ function Login() {
               </div>
               {/* <Link to="/forgot-password" className="forgot-password">Forgot password?</Link> */}
             </div>
-            
+
             <button type="submit" className="auth-button" disabled={loading}>
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
-          
+
           <div className="auth-divider">
             <span>OR</span>
           </div>
-          
+
           <div className="auth-link">
             <p>Don't have an account? <Link to="/register">Sign up</Link></p>
           </div>

@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './index.css';
-import App from './App';
+
 import LandingPage from './components/LandingPage';
 import Login from './components/auth/Login';
 import Register from './components/auth/Register';
@@ -29,7 +29,7 @@ root.render(
             <Register />
           </PublicRoute>
         } />
-        
+
         {/* Protected routes */}
         <Route path="/teacher" element={
           <ProtectedRoute>
@@ -46,10 +46,10 @@ root.render(
             <NotFound />
           </ProtectedRoute>
         } />
-        
+
         {/* 404 route */}
         <Route path="/404" element={<NotFound />} />
-        
+
         {/* Redirect any unknown routes to 404 */}
         <Route path="*" element={<Navigate to="/404" replace />} />
       </Routes>

@@ -75,7 +75,7 @@ function Register() {
         payload.batches = teacherBatches;
       }
 
-      const response = await axios.post(`${API_BASE_URL}${endpoint}`, payload);
+      await axios.post(`${API_BASE_URL}${endpoint}`, payload);
 
       // If registration is successful, automatically log in
       const formData = new FormData();
@@ -83,7 +83,7 @@ function Register() {
       formData.append('password', password);
 
       const loginResponse = await axios.post(`${API_BASE_URL}/token`, formData);
-      
+
       localStorage.setItem('token', loginResponse.data.access_token);
       localStorage.setItem('userType', loginResponse.data.user_type);
 
@@ -106,14 +106,14 @@ function Register() {
       <div className="auth-nav">
         <Link to="/" className="auth-logo">TestifyAI</Link>
       </div>
-      
+
       <div className="auth-content">
         <div className="auth-box">
           <h2>Create an Account</h2>
           <p className="auth-subtitle">Join TestifyAI to start creating quizzes</p>
-          
+
           {error && <div className="error-message">{error}</div>}
-          
+
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-group">
               <label htmlFor="name">Full Name</label>
@@ -126,7 +126,7 @@ function Register() {
                 required
               />
             </div>
-            
+
             <div className="form-group">
               <label htmlFor="email">Email</label>
               <input
@@ -138,7 +138,7 @@ function Register() {
                 required
               />
             </div>
-            
+
             <div className="form-group">
               <label htmlFor="password">Password</label>
               <input
@@ -150,7 +150,7 @@ function Register() {
                 required
               />
             </div>
-            
+
             <div className="form-group">
               <label htmlFor="confirmPassword">Confirm Password</label>
               <input
@@ -162,7 +162,7 @@ function Register() {
                 required
               />
             </div>
-            
+
             <div className="form-group">
               <label htmlFor="role">Role</label>
               <select
@@ -211,20 +211,20 @@ function Register() {
                 <p className="batch-helper">Select all batches you teach (F1 - F9).</p>
               </div>
             )}
-            
+
             <div className="password-requirements">
               <p>Password must be at least 6 characters long</p>
             </div>
-            
+
             <button type="submit" className="auth-button" disabled={loading}>
               {loading ? 'Creating Account...' : 'Create Account'}
             </button>
           </form>
-          
+
           <div className="auth-divider">
             <span>OR</span>
           </div>
-          
+
           <div className="auth-link">
             <p>Already have an account? <Link to="/login">Sign in</Link></p>
           </div>

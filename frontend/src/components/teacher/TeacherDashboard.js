@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import jsPDF from 'jspdf';
@@ -50,8 +50,8 @@ function TeacherDashboard() {
     // Fetch teacher profile and quizzes
     fetchTeacherProfile();
     fetchTeacherQuizzes();
-  }, [navigate]);
-  const fetchTeacherProfile = async () => {
+  }, [navigate, fetchTeacherProfile, fetchTeacherQuizzes]);
+  const fetchTeacherProfile = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.get(`${API_BASE_URL}/teachers/me`, {
@@ -68,9 +68,9 @@ function TeacherDashboard() {
         navigate('/');
       }
     }
-  };
+  }, [navigate]);
 
-  const fetchTeacherQuizzes = async () => {
+  const fetchTeacherQuizzes = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.get(`${API_BASE_URL}/quizzes/teacher`, {
@@ -80,7 +80,7 @@ function TeacherDashboard() {
     } catch (err) {
       console.error('Error fetching quizzes:', err);
     }
-  };
+  }, []);
 
   const toggleSelectedBatch = (batch) => {
     if (!teacherBatches.includes(batch)) return;
