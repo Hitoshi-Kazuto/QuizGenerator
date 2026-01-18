@@ -39,18 +39,6 @@ function TeacherDashboard() {
   const [isUpdatingBatches, setIsUpdatingBatches] = useState(false);
   const [batchModalError, setBatchModalError] = useState('');
 
-  useEffect(() => {
-    // Check if user is logged in
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/');
-      return;
-    }
-
-    // Fetch teacher profile and quizzes
-    fetchTeacherProfile();
-    fetchTeacherQuizzes();
-  }, [navigate, fetchTeacherProfile, fetchTeacherQuizzes]);
   const fetchTeacherProfile = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
@@ -81,6 +69,20 @@ function TeacherDashboard() {
       console.error('Error fetching quizzes:', err);
     }
   }, []);
+
+  useEffect(() => {
+    // Check if user is logged in
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/');
+      return;
+    }
+
+    // Fetch teacher profile and quizzes
+    fetchTeacherProfile();
+    fetchTeacherQuizzes();
+  }, [navigate, fetchTeacherProfile, fetchTeacherQuizzes]);
+
 
   const toggleSelectedBatch = (batch) => {
     if (!teacherBatches.includes(batch)) return;
