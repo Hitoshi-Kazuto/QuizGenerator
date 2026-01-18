@@ -396,3 +396,91 @@
   background-color: var(--primary-dark);
   transform: translateY(-2px);
 } 
+
+.badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background-color: rgba(67, 97, 238, 0.1);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.manage-batch-btn {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--primary);
+  background: white;
+  color: var(--primary);
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.manage-batch-btn:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.batch-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(5, 7, 14, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 1rem;
+}
+
+.batch-modal {
+  background: white;
+  border-radius: 1rem;
+  padding: 2rem;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+  text-align: center;
+}
+
+.batch-modal h2 {
+  margin-bottom: 0.5rem;
+  color: var(--gray-900);
+}
+
+.batch-modal select {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--gray-300);
+  font-size: 1rem;
+}
+
+.batch-modal-actions {
+  margin-top: 1.5rem;
+  display: flex;
+  justify-content: center;
+}
+
+.modal-error {
+  color: var(--danger);
+  margin-top: 0.75rem;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, #6c63ff, #42a5f5);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  padding: 0.75rem 2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

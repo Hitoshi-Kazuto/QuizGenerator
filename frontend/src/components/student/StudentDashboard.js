@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import './StudentDashboard.css';
-
-const API_BASE_URL = 'https://quizgenerator-6qge.onrender.com';
+import { API_BASE_URL } from '../../config';
+const BATCHES = ['F1','F2','F3','F4','F5','F6','F7','F8','F9'];
 
 const StudentDashboard = () => {
   const navigate = useNavigate();
@@ -21,6 +21,10 @@ const StudentDashboard = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedAnswers, setSelectedAnswers] = useState({});
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [selectedBatchForUpdate, setSelectedBatchForUpdate] = useState(BATCHES[0]);
+  const [isUpdatingBatch, setIsUpdatingBatch] = useState(false);
+  const [batchModalError, setBatchModalError] = useState('');
 
   useEffect(() => {
     // Check if user is logged in
@@ -30,25 +34,32 @@ const StudentDashboard = () => {
       return;
     }
 
-    // Get user profile
-    const fetchUserProfile = async () => {
-      try {
-        const response = await axios.get(`${API_BASE_URL}/students/me`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setUser(response.data);
-      } catch (err) {
-        console.error('Error fetching user profile:', err);
-        if (err.response && err.response.status === 401) {
-          navigate('/');
-        }
-      }
-    };
-
     fetchUserProfile();
-    fetchQuizzes();
-    fetchAttempts();
   }, [navigate]);
+
+  const fetchUserProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API_BASE_URL}/students/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUser(response.data);
+      if (response.data.batch) {
+        setSelectedBatchForUpdate(response.data.batch);
+        setShowBatchModal(false);
+        await fetchQuizzes();
+        await fetchAttempts();
+      } else {
+        setShowBatchModal(true);
+        setQuizzes([]);
+      }
+    } catch (err) {
+      console.error('Error fetching user profile:', err);
+      if (err.response && err.response.status === 401) {
+        navigate('/');
+      }
+    }
+  };
 
   const fetchQuizzes = async () => {
     try {
@@ -82,10 +93,48 @@ const StudentDashboard = () => {
     navigate('/');
   };
 
+  const openBatchModal = () => {
+    setSelectedBatchForUpdate(user?.batch || BATCHES[0]);
+    setBatchModalError('');
+    setShowBatchModal(true);
+  };
+
+  const handleBatchUpdate = async () => {
+    if (!selectedBatchForUpdate) {
+      setBatchModalError('Please select a batch');
+      return;
+    }
+    try {
+      setIsUpdatingBatch(true);
+      const token = localStorage.getItem('token');
+      await axios.patch(
+        `${API_BASE_URL}/students/me/batch`,
+        { batch: selectedBatchForUpdate },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setUser((prev) => prev ? { ...prev, batch: selectedBatchForUpdate } : prev);
+      setShowBatchModal(false);
+      setBatchModalError('');
+      await fetchQuizzes();
+      await fetchAttempts();
+    } catch (err) {
+      console.error('Error updating batch:', err);
+      setBatchModalError(err.response?.data?.detail || 'Failed to update batch');
+    } finally {
+      setIsUpdatingBatch(false);
+    }
+  };
+
   const handleAccessCodeSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
+
+    if (!selectedQuiz) {
+      setError('Please select a quiz first');
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const token = localStorage.getItem('token');
@@ -195,11 +244,20 @@ const StudentDashboard = () => {
   }
 
   return (
+    <>
     <div className="student-dashboard">
       <nav className="dashboard-nav">
         <h1>TestifyAI - Student Dashboard</h1>
         <div className="user-info">
-          {user && <span>Welcome, {user.name}</span>}
+          {user && (
+            <>
+              <span>Welcome, {user.name}</span>
+              <span className="badge">Batch: {user.batch || 'Not set'}</span>
+              <button className="manage-batch-btn" onClick={openBatchModal}>
+                Update Batch
+              </button>
+            </>
+          )}
           <button className="logout-button" onClick={handleLogout}>Logout</button>
         </div>
       </nav>
@@ -322,6 +380,35 @@ const StudentDashboard = () => {
         )}
       </div>
     </div>
+      {showBatchModal && (
+        <div className="batch-modal-backdrop">
+          <div className="batch-modal">
+            <h2>Select Your Batch</h2>
+            <p>Please choose your current batch (F1 - F9) to continue.</p>
+            <select
+              value={selectedBatchForUpdate}
+              onChange={(e) => setSelectedBatchForUpdate(e.target.value)}
+            >
+              {BATCHES.map((batch) => (
+                <option key={batch} value={batch}>
+                  {batch}
+                </option>
+              ))}
+            </select>
+            {batchModalError && <p className="modal-error">{batchModalError}</p>}
+            <div className="batch-modal-actions">
+              <button
+                className="primary-btn"
+                onClick={handleBatchUpdate}
+                disabled={isUpdatingBatch}
+              >
+                {isUpdatingBatch ? 'Saving...' : 'Save Batch'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

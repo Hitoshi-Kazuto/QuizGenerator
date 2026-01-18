@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import './Login.css';
-
-const API_BASE_URL = 'https://quizgenerator-6qge.onrender.com';
+import { API_BASE_URL } from '../../config';
 
 function Login() {
   const [email, setEmail] = useState('');

@@ -20,7 +20,7 @@ import nltk
 nltk.download('punkt', quiet=True)
 
 # Import our modules
-from database import Teacher, Student, Quiz, QuizAttempt, generate_access_code
+from database import Teacher, Student, Quiz, QuizAttempt, BATCH_CHOICES
 from auth import (
     create_access_token, 
     get_current_teacher, 
@@ -44,6 +44,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+VALID_BATCHES = {batch.upper() for batch in BATCH_CHOICES}
+
+
+def normalize_batches(batches: List[str]) -> List[str]:
+    normalized = list({batch.strip().upper() for batch in (batches or []) if batch})
+    invalid = [batch for batch in normalized if batch not in VALID_BATCHES]
+    if invalid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid batch selection: {', '.join(invalid)}"
+        )
+    return normalized
+
+
+def normalize_batch(batch: Optional[str]) -> str:
+    if not batch:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Batch is required"
+        )
+    normalized = batch.strip().upper()
+    if normalized not in VALID_BATCHES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid batch selection: {normalized}"
+        )
+    return normalized
+
 # Root endpoint
 @app.get("/")
 async def root():
@@ -63,17 +91,26 @@ class TeacherCreate(BaseModel):
     email: EmailStr
     password: str
     name: str
+    batches: List[str] = []
 
 class StudentCreate(BaseModel):
     email: EmailStr
     password: str
     name: str
+    batch: str
 
 class QuizCreate(BaseModel):
     title: str
     description: str
     questions: List[Dict[str, Any]]
     quiz_type: str
+    batches: List[str]
+
+class StudentBatchUpdate(BaseModel):
+    batch: str
+
+class TeacherBatchesUpdate(BaseModel):
+    batches: List[str]
 
 class QuizAccessRequest(BaseModel):
     access_code: str
@@ -128,8 +165,9 @@ async def register_teacher(teacher: TeacherCreate):
             detail="Email already registered"
         )
     
+    normalized_batches = normalize_batches(teacher.batches)
     # Create new teacher
-    new_teacher = await Teacher.create(teacher.email, teacher.password, teacher.name)
+    new_teacher = await Teacher.create(teacher.email, teacher.password, teacher.name, normalized_batches)
     return {"message": "Teacher registered successfully", "teacher_id": str(new_teacher["_id"])}
 
 @app.get("/teachers/me")
@@ -137,8 +175,24 @@ async def get_teacher_profile(current_teacher: dict = Depends(get_current_teache
     return {
         "id": str(current_teacher["_id"]),
         "email": current_teacher["email"],
-        "name": current_teacher["name"]
+        "name": current_teacher["name"],
+        "batches": current_teacher.get("batches", [])
     }
+
+@app.patch("/teachers/me/batches")
+async def update_teacher_batches(
+    update: TeacherBatchesUpdate,
+    current_teacher: dict = Depends(get_current_teacher)
+):
+    if not update.batches:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please select at least one batch"
+        )
+    normalized_batches = normalize_batches(update.batches)
+    updated_batches = await Teacher.update_batches(str(current_teacher["_id"]), normalized_batches)
+    current_teacher["batches"] = updated_batches
+    return {"message": "Batches updated successfully", "batches": updated_batches}
 
 # Student endpoints
 @app.post("/students/register")
@@ -151,8 +205,9 @@ async def register_student(student: StudentCreate):
             detail="Email already registered"
         )
     
+    normalized_batch = normalize_batch(student.batch)
     # Create new student
-    new_student = await Student.create(student.email, student.password, student.name)
+    new_student = await Student.create(student.email, student.password, student.name, normalized_batch)
     return {"message": "Student registered successfully", "student_id": str(new_student["_id"])}
 
 @app.get("/students/me")
@@ -160,8 +215,19 @@ async def get_student_profile(current_student: dict = Depends(get_current_studen
     return {
         "id": str(current_student["_id"]),
         "email": current_student["email"],
-        "name": current_student["name"]
+        "name": current_student["name"],
+        "batch": current_student.get("batch")
     }
+
+@app.patch("/students/me/batch")
+async def update_student_batch(
+    update: StudentBatchUpdate,
+    current_student: dict = Depends(get_current_student)
+):
+    normalized_batch = normalize_batch(update.batch)
+    updated_batch = await Student.update_batch(str(current_student["_id"]), normalized_batch)
+    current_student["batch"] = updated_batch
+    return {"message": "Batch updated successfully", "batch": updated_batch}
 
 # Quiz endpoints
 @app.post("/generate-quiz")
@@ -196,12 +262,30 @@ async def generate_quiz(request: QuizRequest):
 
 @app.post("/quizzes")
 async def create_quiz(quiz: QuizCreate, current_teacher: dict = Depends(get_current_teacher)):
+    if not quiz.batches:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please select at least one batch to share the quiz"
+        )
+    normalized_batches = normalize_batches(quiz.batches)
+    teacher_batches = set(current_teacher.get("batches", []))
+    if not teacher_batches:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not associated with any batches"
+        )
+    if not set(normalized_batches).issubset(teacher_batches):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only share quizzes with batches assigned to you"
+        )
     new_quiz = await Quiz.create(
         teacher_id=str(current_teacher["_id"]),
         title=quiz.title,
         description=quiz.description,
         questions=quiz.questions,
-        quiz_type=quiz.quiz_type
+        quiz_type=quiz.quiz_type,
+        batches=normalized_batches
     )
     return {
         "message": "Quiz created successfully",
@@ -211,7 +295,13 @@ async def create_quiz(quiz: QuizCreate, current_teacher: dict = Depends(get_curr
 
 @app.get("/quizzes")
 async def get_all_quizzes(current_student: dict = Depends(get_current_student)):
-    quizzes = await Quiz.get_all()
+    student_batch = current_student.get("batch")
+    if not student_batch:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Student is not associated with any batch"
+        )
+    quizzes = await Quiz.get_by_batch(student_batch)
     # Convert ObjectId to string for JSON serialization
     for quiz in quizzes:
         quiz["_id"] = str(quiz["_id"])
@@ -234,6 +324,12 @@ async def access_quiz_by_code(access_request: QuizAccessRequest, current_student
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Quiz not found with this access code"
+        )
+    student_batch = current_student.get("batch")
+    if not student_batch or student_batch not in quiz.get("batches", []):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This quiz is not available for your batch"
         )
     
     # Check if student has already attempted this quiz
@@ -262,6 +358,12 @@ async def get_quiz_by_id(quiz_id: str, current_student: dict = Depends(get_curre
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Quiz not found"
         )
+    student_batch = current_student.get("batch")
+    if not student_batch or student_batch not in quiz.get("batches", []):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to access this quiz"
+        )
     
     # Convert ObjectId to string for JSON serialization
     quiz["_id"] = str(quiz["_id"])
@@ -275,6 +377,12 @@ async def submit_quiz(submission: QuizSubmission, current_student: dict = Depend
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Quiz not found"
+        )
+    student_batch = current_student.get("batch")
+    if not student_batch or student_batch not in quiz.get("batches", []):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to submit this quiz"
         )
     
     # Check if student has already attempted this quiz

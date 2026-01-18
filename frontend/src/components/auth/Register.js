@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import './Register.css';
-
-const API_BASE_URL = 'https://quizgenerator-6qge.onrender.com';
+import { API_BASE_URL } from '../../config';
+const BATCHES = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9'];
 
 function Register() {
   const [email, setEmail] = useState('');
@@ -11,9 +11,19 @@ function Register() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState('student');
+  const [studentBatch, setStudentBatch] = useState(BATCHES[0]);
+  const [teacherBatches, setTeacherBatches] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const toggleTeacherBatch = (batch) => {
+    setTeacherBatches((prev) =>
+      prev.includes(batch)
+        ? prev.filter((b) => b !== batch)
+        : [...prev, batch]
+    );
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,13 +49,33 @@ function Register() {
       return;
     }
 
+    if (role === 'student' && !studentBatch) {
+      setError('Please select a batch');
+      setLoading(false);
+      return;
+    }
+
+    if (role === 'teacher' && teacherBatches.length === 0) {
+      setError('Please select at least one batch you teach');
+      setLoading(false);
+      return;
+    }
+
     try {
       const endpoint = role === 'teacher' ? '/teachers/register' : '/students/register';
-      const response = await axios.post(`${API_BASE_URL}${endpoint}`, {
+      const payload = {
         email,
         password,
         name
-      });
+      };
+
+      if (role === 'student') {
+        payload.batch = studentBatch;
+      } else {
+        payload.batches = teacherBatches;
+      }
+
+      const response = await axios.post(`${API_BASE_URL}${endpoint}`, payload);
 
       // If registration is successful, automatically log in
       const formData = new FormData();
@@ -138,12 +168,49 @@ function Register() {
               <select
                 id="role"
                 value={role}
-                onChange={(e) => setRole(e.target.value)}
+                onChange={(e) => {
+                  setRole(e.target.value);
+                  setError('');
+                }}
               >
                 <option value="student">Student</option>
                 <option value="teacher">Teacher</option>
               </select>
             </div>
+
+            {role === 'student' ? (
+              <div className="form-group">
+                <label htmlFor="studentBatch">Select Batch</label>
+                <select
+                  id="studentBatch"
+                  value={studentBatch}
+                  onChange={(e) => setStudentBatch(e.target.value)}
+                >
+                  {BATCHES.map((batch) => (
+                    <option key={batch} value={batch}>
+                      {batch}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="form-group">
+                <label>Assign Batches</label>
+                <div className="batch-selector-grid">
+                  {BATCHES.map((batch) => (
+                    <button
+                      key={batch}
+                      type="button"
+                      className={`batch-chip ${teacherBatches.includes(batch) ? 'selected' : ''}`}
+                      onClick={() => toggleTeacherBatch(batch)}
+                    >
+                      {batch}
+                    </button>
+                  ))}
+                </div>
+                <p className="batch-helper">Select all batches you teach (F1 - F9).</p>
+              </div>
+            )}
             
             <div className="password-requirements">
               <p>Password must be at least 6 characters long</p>
