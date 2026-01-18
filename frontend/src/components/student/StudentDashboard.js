@@ -24,17 +24,6 @@ const StudentDashboard = () => {
   const [isUpdatingBatch, setIsUpdatingBatch] = useState(false);
   const [batchModalError, setBatchModalError] = useState('');
 
-  useEffect(() => {
-    // Check if user is logged in
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/');
-      return;
-    }
-
-    fetchUserProfile();
-  }, [navigate, fetchUserProfile]);
-
   const fetchQuizzes = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
@@ -83,6 +72,21 @@ const StudentDashboard = () => {
       }
     }
   }, [navigate, fetchQuizzes, fetchAttempts]);
+
+  useEffect(() => {
+    // Check if user is logged in
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/');
+      return;
+    }
+
+    fetchUserProfile();
+  }, [navigate, fetchUserProfile]);
+
+
+
+
 
   const handleLogout = () => {
     // Clear any stored user data/tokens
@@ -267,7 +271,9 @@ const StudentDashboard = () => {
                       className="access-code-input"
                     />
                     <div className="form-actions">
-                      <button type="submit" className="access-code-btn">Start Quiz</button>
+                      <button type="submit" className="access-code-btn" disabled={isLoading}>
+                        {isLoading ? 'Starting...' : 'Start Quiz'}
+                      </button>
                       <button
                         type="button"
                         className="cancel-btn"
@@ -359,9 +365,9 @@ const StudentDashboard = () => {
                 <button
                   className="submit-btn"
                   onClick={submitQuiz}
-                  disabled={Object.keys(selectedAnswers).length !== currentQuiz.questions.length}
+                  disabled={Object.keys(selectedAnswers).length !== currentQuiz.questions.length || isSubmitting}
                 >
-                  Submit Quiz
+                  {isSubmitting ? 'Submitting...' : 'Submit Quiz'}
                 </button>
               )}
             </div>

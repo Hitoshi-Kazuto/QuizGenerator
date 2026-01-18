@@ -19,7 +19,7 @@ const LandingPage = () => {
             <Link to="/register" className="register-btn">Register</Link>
           </div>
         </nav>
-        
+
         <div className="hero-content">
           <h1>Transform Your Content into Interactive Quizzes</h1>
           <p>Create engaging quizzes from text, PDFs, or websites in seconds. Perfect for teachers, educators, and content creators.</p>
@@ -28,7 +28,7 @@ const LandingPage = () => {
             <a href="#demo" className="secondary-btn">Watch Demo</a>
           </div>
         </div>
-        
+
         <div className="hero-image">
           <img src={HeroImage} alt="TestifyAI Platform" />
         </div>
@@ -181,18 +181,17 @@ const LandingPage = () => {
               <a href="#testimonials">Testimonials</a>
             </div>
             <div className="footer-column">
-              <h4>Resources</h4>
-              <a href="#">Documentation</a>
-              <a href="#">Blog</a>
-              <a href="#">Support</a>
-              <a href="#">FAQ</a>
+              <Link to="/">Documentation</Link>
+              <Link to="/">Blog</Link>
+              <Link to="/">Support</Link>
+              <Link to="/">FAQ</Link>
             </div>
             <div className="footer-column">
               <h4>Company</h4>
-              <a href="#">About Us</a>
-              <a href="#">Contact</a>
-              <a href="#">Privacy Policy</a>
-              <a href="#">Terms of Service</a>
+              <Link to="/">About Us</Link>
+              <Link to="/">Contact</Link>
+              <Link to="/">Privacy Policy</Link>
+              <Link to="/">Terms of Service</Link>
             </div>
           </div>
         </div>
