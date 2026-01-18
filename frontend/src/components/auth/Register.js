@@ -3,6 +3,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import './Register.css';
 
+const API_BASE_URL = 'https://quizgenerator-6qge.onrender.com';
+
 function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -38,23 +40,32 @@ function Register() {
     }
 
     try {
-      // Register user based on role
       const endpoint = role === 'teacher' ? '/teachers/register' : '/students/register';
-      const response = await axios.post(`http://localhost:8000${endpoint}`, {
+      const response = await axios.post(`${API_BASE_URL}${endpoint}`, {
         email,
         password,
         name
       });
 
-      // After successful registration, redirect to login
-      if (response.data) {
-        // Show success message
-        alert('Registration successful! Please login to continue.');
-        navigate('/');
+      // If registration is successful, automatically log in
+      const formData = new FormData();
+      formData.append('username', email);
+      formData.append('password', password);
+
+      const loginResponse = await axios.post(`${API_BASE_URL}/token`, formData);
+      
+      localStorage.setItem('token', loginResponse.data.access_token);
+      localStorage.setItem('userType', loginResponse.data.user_type);
+
+      // Redirect based on user type
+      if (loginResponse.data.user_type === 'teacher') {
+        navigate('/teacher');
+      } else {
+        navigate('/student');
       }
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
-      console.error('Registration error:', err);
+    } catch (error) {
+      console.error('Registration failed:', error);
+      setError(error.response?.data?.detail || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }

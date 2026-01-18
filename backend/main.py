@@ -13,7 +13,6 @@ from typing import List, Optional, Dict, Any
 from bson import ObjectId
 import requests
 from bs4 import BeautifulSoup
-import re
 from newspaper import Article
 import nltk
 
@@ -39,7 +38,7 @@ app = FastAPI()
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,6 +48,10 @@ app.add_middleware(
 @app.get("/")
 async def root():
     return {"message": "TestifyAI API is running"}
+
+@app.head("/ping")
+async def ping():
+    return
 
 # Pydantic models for request validation
 class QuizRequest(BaseModel):

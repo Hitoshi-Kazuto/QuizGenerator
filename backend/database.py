@@ -8,18 +8,18 @@ import secrets
 import string
 import ssl
 
-# Load environment variables
+
 load_dotenv()
 
-# MongoDB connection string
+
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
 DB_NAME = os.getenv("DB_NAME", "QuizGen")
 
-# Create a Motor client for async operations with SSL certificate verification disabled
+
 client = AsyncIOMotorClient(MONGO_URL, tlsAllowInvalidCertificates=True)
 db = client[DB_NAME]
 
-# Create a PyMongo client for sync operations (used for indexing) with SSL certificate verification disabled
+
 sync_client = MongoClient(MONGO_URL, tlsAllowInvalidCertificates=True)
 sync_db = sync_client[DB_NAME]
 
@@ -29,14 +29,14 @@ students_collection = db.students
 quizzes_collection = db.quizzes
 attempts_collection = db.attempts
 
-# Create indexes
+
 sync_db.teachers.create_index("email", unique=True)
 sync_db.students.create_index("email", unique=True)
 sync_db.quizzes.create_index("teacher_id")
 sync_db.quizzes.create_index("access_code")
 sync_db.attempts.create_index([("student_id", 1), ("quiz_id", 1)])
 
-# Helper functions
+
 def generate_access_code(length=8):
     """Generate a random access code for quizzes"""
     alphabet = string.ascii_uppercase + string.digits

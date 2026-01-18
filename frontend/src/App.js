@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import jsPDF from 'jspdf';
+import { API_BASE_URL } from './config';
 import './App.css';
 
 function App() {
@@ -27,7 +28,7 @@ function App() {
       console.log('Sending request with text length:', text.length);
       console.log('Quiz type:', quizType);
       
-      const response = await axios.post('http://localhost:8000/generate-quiz', {
+      const response = await axios.post(`${API_BASE_URL}/generate-quiz`, {
         text: text,
         quiz_type: quizType
       });
@@ -70,7 +71,7 @@ function App() {
     formData.append('file', file);
     
     try {
-      const response = await axios.post('http://localhost:8000/upload-pdf', formData, {
+      const response = await axios.post(`${API_BASE_URL}/upload-pdf`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }

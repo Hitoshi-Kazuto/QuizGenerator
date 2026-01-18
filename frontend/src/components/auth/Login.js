@@ -3,6 +3,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import './Login.css';
 
+const API_BASE_URL = 'https://quizgenerator-6qge.onrender.com';
+
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,7 +23,7 @@ function Login() {
       formData.append('username', email);
       formData.append('password', password);
 
-      const response = await axios.post('http://localhost:8000/token', formData);
+      const response = await axios.post(`${API_BASE_URL}/token`, formData);
       
       // Store the token and user type
       localStorage.setItem('token', response.data.access_token);
@@ -33,9 +35,9 @@ function Login() {
       } else {
         navigate('/student');
       }
-    } catch (err) {
-      setError('Invalid credentials');
-      console.error('Login error:', err);
+    } catch (error) {
+      console.error('Login failed:', error);
+      setError('Invalid email or password');
     } finally {
       setLoading(false);
     }
@@ -96,6 +98,7 @@ function Login() {
                 <input type="checkbox" id="remember" />
                 <label htmlFor="remember">Remember me</label>
               </div>
+              {/* <Link to="/forgot-password" className="forgot-password">Forgot password?</Link> */}
               <Link to="/forgot-password" className="forgot-password">Forgot password?</Link>
             </div>
             
