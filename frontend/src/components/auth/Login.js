@@ -81,6 +81,17 @@ function Login() {
               />
             </div>
             
+            <div className="form-group">
+              <label htmlFor="role">Role</label>
+              <select
+                id="role"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+              >
+                <option value="student">Student</option>
+                <option value="teacher">Teacher</option>
+              </select>
+            </div>
             
             <div className="form-options">
               <div className="remember-me">
@@ -88,6 +99,7 @@ function Login() {
                 <label htmlFor="remember">Remember me</label>
               </div>
               {/* <Link to="/forgot-password" className="forgot-password">Forgot password?</Link> */}
+              <Link to="/forgot-password" className="forgot-password">Forgot password?</Link>
             </div>
             
             <button type="submit" className="auth-button" disabled={loading}>

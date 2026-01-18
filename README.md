@@ -1,4 +1,4 @@
-# Quiz Generator
+# TestifyAI
 
 A web application that generates quizzes from text or PDF documents using Google's Gemini AI.
 

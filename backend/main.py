@@ -47,7 +47,7 @@ app.add_middleware(
 # Root endpoint
 @app.get("/")
 async def root():
-    return {"message": "Quiz Generator API is running"}
+    return {"message": "TestifyAI API is running"}
 
 @app.head("/ping")
 async def ping():
