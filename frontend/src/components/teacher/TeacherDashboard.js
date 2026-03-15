@@ -4,9 +4,10 @@ import axios from 'axios';
 import jsPDF from 'jspdf';
 import XLSX from 'xlsx-js-style';
 import { API_BASE_URL } from '../../config';
+import { isTokenExpired, clearAuth } from '../../utils/tokenUtils';
 import './TeacherDashboard.css';
 
-const BATCHES = ['F1','F2','F3','F4','F5','F6','F7','F8','F9'];
+const BATCHES = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9'];
 
 function TeacherDashboard() {
   const navigate = useNavigate();
@@ -53,6 +54,7 @@ function TeacherDashboard() {
     } catch (err) {
       console.error('Error fetching teacher profile:', err);
       if (err.response && err.response.status === 401) {
+        clearAuth();
         navigate('/');
       }
     }
@@ -71,9 +73,10 @@ function TeacherDashboard() {
   }, []);
 
   useEffect(() => {
-    // Check if user is logged in
+    // Check if user is logged in and token is still valid
     const token = localStorage.getItem('token');
-    if (!token) {
+    if (!token || isTokenExpired(token)) {
+      clearAuth();
       navigate('/');
       return;
     }
@@ -131,14 +134,13 @@ function TeacherDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userType');
+    clearAuth();
     navigate('/');
   };
 
   const generateQuiz = async () => {
     setError(null);
-    
+
     if (!text.trim()) {
       setError('Please enter some text or upload a PDF to generate a quiz');
       return;
@@ -172,31 +174,31 @@ function TeacherDashboard() {
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
-    
+
     if (file.type !== 'application/pdf') {
       setError('Please upload a PDF file');
       return;
     }
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     const formData = new FormData();
     formData.append('file', file);
-    
+
     try {
       const response = await axios.post(`${API_BASE_URL}/upload-pdf`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
-      
+
       if (!response.data.text || response.data.text.trim() === '') {
         const errorMessage = response.data.error || 'No text could be extracted from the PDF. Please try a different file.';
         setError(errorMessage);
         return;
       }
-      
+
       setText(response.data.text);
       setIsPdfUploaded(true);
     } catch (error) {
@@ -229,7 +231,7 @@ function TeacherDashboard() {
       }
 
       setText(response.data.text);
-      
+
       // If metadata is available, use it to pre-fill the quiz title and description
       if (response.data.metadata) {
         const { title, summary } = response.data.metadata;
@@ -240,7 +242,7 @@ function TeacherDashboard() {
           setQuizDescription(summary);
         }
       }
-      
+
       setWebsiteUrl('');
     } catch (error) {
       console.error('Website scraping failed:', error);
@@ -323,24 +325,24 @@ function TeacherDashboard() {
 
   const downloadQuiz = (quizToDownload, includeAnswers = false) => {
     const doc = new jsPDF();
-    
+
     // Set font sizes
     const titleFontSize = 16;
     const questionFontSize = 12;
     const optionFontSize = 10;
-    
+
     // Set initial positions
     let yPos = 20;
     const leftMargin = 15;
     const pageWidth = doc.internal.pageSize.getWidth();
     const textWidth = pageWidth - 2 * leftMargin;
-    
+
     // Add title
     doc.setFontSize(titleFontSize);
     doc.setFont('helvetica', 'bold');
     doc.text(quizToDownload.title || 'Generated Quiz', leftMargin, yPos);
     yPos += 15;
-    
+
     // Process each question
     doc.setFont('helvetica', 'normal');
     quizToDownload.questions.forEach((q, index) => {
@@ -348,32 +350,32 @@ function TeacherDashboard() {
         doc.addPage();
         yPos = 20;
       }
-      
+
       doc.setFontSize(questionFontSize);
       doc.setFont('helvetica', 'bold');
       const questionText = `${index + 1}. ${q.text}`;
-      
+
       const splitQuestionText = doc.splitTextToSize(questionText, textWidth);
       doc.text(splitQuestionText, leftMargin, yPos);
-      
+
       yPos += splitQuestionText.length * 7;
-      
+
       if ((q.type === 'mcq' || q.type === 'multi_answer') && q.options) {
         doc.setFontSize(optionFontSize);
         doc.setFont('helvetica', 'normal');
-        
+
         q.options.forEach((option, optIndex) => {
           if (yPos > 270) {
             doc.addPage();
             yPos = 20;
           }
-          
+
           const optionLetter = String.fromCharCode(65 + optIndex);
           const optionText = `${optionLetter}. ${option}`;
-          
+
           const splitOptionText = doc.splitTextToSize(optionText, textWidth - 10);
           doc.text(splitOptionText, leftMargin + 10, yPos);
-          
+
           yPos += splitOptionText.length * 6 + 2;
         });
 
@@ -383,24 +385,24 @@ function TeacherDashboard() {
             doc.addPage();
             yPos = 20;
           }
-          
+
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(0, 100, 0); // Dark green color for answers
-          
+
           let answerText = '';
           if (q.type === 'mcq' || q.type === 'true_false') {
             answerText = `Correct Answer: ${q.correct_answer}`;
           } else if (q.type === 'multi_answer') {
             answerText = `Correct Answers: ${q.correct_answers.join(', ')}`;
           }
-          
+
           const splitAnswerText = doc.splitTextToSize(answerText, textWidth - 10);
           doc.text(splitAnswerText, leftMargin + 10, yPos);
-          
+
           yPos += splitAnswerText.length * 6 + 5;
           doc.setTextColor(0, 0, 0); // Reset text color
         }
-        
+
         yPos += 5;
       }
     });
@@ -409,31 +411,31 @@ function TeacherDashboard() {
     if (includeAnswers) {
       doc.addPage();
       yPos = 20;
-      
+
       doc.setFontSize(titleFontSize);
       doc.setFont('helvetica', 'bold');
       doc.text('Answer Key', leftMargin, yPos);
       yPos += 15;
-      
+
       doc.setFontSize(questionFontSize);
       quizToDownload.questions.forEach((q, index) => {
         if (yPos > 270) {
           doc.addPage();
           yPos = 20;
         }
-        
+
         const questionNumber = `${index + 1}.`;
         let answerText = '';
-        
+
         if (q.type === 'mcq' || q.type === 'true_false') {
           answerText = q.correct_answer;
         } else if (q.type === 'multi_answer') {
           answerText = q.correct_answers.join(', ');
         }
-        
+
         doc.text(questionNumber, leftMargin, yPos);
         doc.text(answerText, leftMargin + 15, yPos);
-        
+
         yPos += 10;
       });
     }
@@ -463,6 +465,28 @@ function TeacherDashboard() {
     setSelectedQuizForAttempts(null);
   };
 
+  const resetAttempt = async (attemptId) => {
+    if (!window.confirm('Are you sure you want to reset this attempt? The student will be able to retake the quiz.')) {
+      return;
+    }
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(
+        `${API_BASE_URL}/quizzes/${selectedQuizForAttempts._id}/attempts/${attemptId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      // Refresh attempts list
+      const response = await axios.get(
+        `${API_BASE_URL}/quizzes/${selectedQuizForAttempts._id}/attempts`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSelectedQuizAttempts(response.data);
+    } catch (err) {
+      console.error('Error resetting attempt:', err);
+      setError(err.response?.data?.detail || 'Failed to reset attempt');
+    }
+  };
+
   const downloadAttemptsAsExcel = () => {
     if (!selectedQuizAttempts.length) return;
 
@@ -488,12 +512,12 @@ function TeacherDashboard() {
 
       // Get the range of cells in the worksheet
       const range = XLSX.utils.decode_range(ws['!ref']);
-      
+
       // Apply styles to header row
       for (let C = range.s.c; C <= range.e.c; C++) {
         const headerCell = XLSX.utils.encode_cell({ r: 0, c: C });
         if (!ws[headerCell]) continue;
-        
+
         ws[headerCell].s = headerStyle;
       }
 
@@ -716,9 +740,9 @@ function TeacherDashboard() {
                     placeholder="Enter quiz description"
                   />
                 </div>
-            <div className="sharing-summary">
-              <span>Sharing with:</span> {selectedBatches.length ? selectedBatches.join(', ') : 'Select at least one batch'}
-            </div>
+                <div className="sharing-summary">
+                  <span>Sharing with:</span> {selectedBatches.length ? selectedBatches.join(', ') : 'Select at least one batch'}
+                </div>
                 <div className="form-actions">
                   <button
                     onClick={saveQuizToBackend}
@@ -882,9 +906,17 @@ function TeacherDashboard() {
               {selectedQuizAttempts.length > 0 ? (
                 selectedQuizAttempts.map((attempt, index) => (
                   <div key={attempt._id} className="attempt-card">
-                    <h3>Student: {attempt.student_name}</h3>
+                    <div className="attempt-card-header">
+                      <h3>Student: {attempt.student_name}</h3>
+                      {attempt.tab_violation && (
+                        <span className="tab-violation-badge">⚠ Tab Violation</span>
+                      )}
+                    </div>
                     <p>Score: {attempt.score}%</p>
                     <p>Submitted: {new Date(attempt.submitted_at).toLocaleString()}</p>
+                    {attempt.tab_switch_count > 0 && (
+                      <p className="tab-switch-info">Tab switches: {attempt.tab_switch_count}</p>
+                    )}
                     <div className="answer-details">
                       {attempt.answers.map((answer, ansIndex) => (
                         <div key={ansIndex} className="answer-item">
@@ -895,6 +927,12 @@ function TeacherDashboard() {
                         </div>
                       ))}
                     </div>
+                    <button
+                      className="reset-attempt-btn"
+                      onClick={() => resetAttempt(attempt._id)}
+                    >
+                      Reset Attempt
+                    </button>
                   </div>
                 ))
               ) : (

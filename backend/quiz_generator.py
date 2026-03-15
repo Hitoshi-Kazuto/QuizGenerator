@@ -1,19 +1,18 @@
 import os
 import json
-import google.generativeai as genai
 import re
+from openai import OpenAI
 
 class QuizGenerator:
     def __init__(self, text: str):
-        genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
         self.text = text
-        # Try using a different model that might be better suited for structured output
-        self.model = genai.GenerativeModel('gemini-1.5-pro')
-        # Fallback model
-        self.fallback_model = genai.GenerativeModel('gemini-2.0-flash')
+        self.client = OpenAI(
+            base_url="https://router.huggingface.co/v1",
+            api_key=os.getenv("HF_API_TOKEN"),
+        )
+        self.model = "Qwen/Qwen3-8B"
 
     def generate_quiz_prompt(self, quiz_type: str, difficulty: str = 'medium'):
-        # Create a more structured prompt with strict type handling
         type_specific_instructions = {
             "mcq": """
             - Generate ONLY Multiple Choice Questions with ONE correct answer
@@ -88,6 +87,7 @@ class QuizGenerator:
         - For MCQ questions, options MUST be an array of 4 strings
         - For multi-answer questions, options MUST be an array of 4-6 strings
         - ALL questions must match the specified difficulty level
+        - Do NOT wrap the JSON in markdown code fences
         """
 
     def parse_response(self, response_text):
@@ -173,61 +173,37 @@ class QuizGenerator:
         try:
             print(f"Generating quiz with type: {quiz_type} and difficulty: {difficulty}")
             print(f"Input text length: {len(self.text)}")
-            
-            # Increase safety settings to handle potential content issues
-            generation_config = {
-                'temperature': 0.7,
-                'max_output_tokens': 2048  # Increased token limit
-            }
-            
-            # Try with the primary model first
-            try:
-                print("Trying with primary model (gemini-1.5-pro)...")
-                response = self.model.generate_content(
-                    prompt, 
-                    generation_config=generation_config
-                )
-                
-                # Print raw response for debugging
-                print("Raw Gemini Response:", response.text)
-                print("Response type:", type(response.text))
-                
-                # Parse and validate the response
-                questions = self.parse_response(response.text)
-                validated_questions = self.validate_questions(questions)
-                
-                if validated_questions:
-                    return validated_questions
-                
-                print("Primary model failed to generate valid questions, trying fallback model...")
-            except Exception as e:
-                print(f"Error with primary model: {e}")
-                print("Trying fallback model...")
-            
-            # If primary model fails, try with the fallback model
-            try:
-                response = self.fallback_model.generate_content(
-                    prompt, 
-                    generation_config=generation_config
-                )
-                
-                # Print raw response for debugging
-                print("Raw Fallback Model Response:", response.text)
-                
-                # Parse and validate the response
-                questions = self.parse_response(response.text)
-                validated_questions = self.validate_questions(questions)
-                
-                if validated_questions:
-                    return validated_questions
-                
-                print("Fallback model also failed to generate valid questions.")
-            except Exception as e:
-                print(f"Error with fallback model: {e}")
-            
-            print("No valid questions generated from either model.")
+            print(f"Using model: {self.model}")
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a quiz generator that outputs ONLY valid JSON arrays. No markdown, no explanations, just the JSON array."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.7,
+                max_tokens=4096,
+            )
+
+            response_text = response.choices[0].message.content
+            print("Raw response:", response_text[:200] + "..." if len(response_text) > 200 else response_text)
+
+            # Parse and validate
+            questions = self.parse_response(response_text)
+            validated_questions = self.validate_questions(questions)
+
+            if validated_questions:
+                return validated_questions
+
+            print("Failed to generate valid questions.")
             return []
-        
+
         except Exception as e:
             print(f"Error in quiz generation: {e}")
             return []

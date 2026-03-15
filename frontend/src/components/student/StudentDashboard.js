@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import './StudentDashboard.css';
 import { API_BASE_URL } from '../../config';
+import { isTokenExpired, clearAuth } from '../../utils/tokenUtils';
 const BATCHES = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9'];
 
 const StudentDashboard = () => {
@@ -23,6 +24,10 @@ const StudentDashboard = () => {
   const [selectedBatchForUpdate, setSelectedBatchForUpdate] = useState(BATCHES[0]);
   const [isUpdatingBatch, setIsUpdatingBatch] = useState(false);
   const [batchModalError, setBatchModalError] = useState('');
+  const [showTabWarning, setShowTabWarning] = useState(false);
+  const tabSwitchCountRef = useRef(0);
+  const isAutoSubmittingRef = useRef(false);
+  const submitQuizRef = useRef(null);
 
   const fetchQuizzes = useCallback(async () => {
     try {
@@ -68,15 +73,17 @@ const StudentDashboard = () => {
     } catch (err) {
       console.error('Error fetching user profile:', err);
       if (err.response && err.response.status === 401) {
+        clearAuth();
         navigate('/');
       }
     }
   }, [navigate, fetchQuizzes, fetchAttempts]);
 
   useEffect(() => {
-    // Check if user is logged in
+    // Check if user is logged in and token is still valid
     const token = localStorage.getItem('token');
-    if (!token) {
+    if (!token || isTokenExpired(token)) {
+      clearAuth();
       navigate('/');
       return;
     }
@@ -89,9 +96,7 @@ const StudentDashboard = () => {
 
 
   const handleLogout = () => {
-    // Clear any stored user data/tokens
-    localStorage.removeItem('token');
-    localStorage.removeItem('userType');
+    clearAuth();
     navigate('/');
   };
 
@@ -156,6 +161,12 @@ const StudentDashboard = () => {
           return;
         }
         setCurrentQuiz(response.data);
+        // Enter fullscreen when quiz starts
+        try {
+          await document.documentElement.requestFullscreen();
+        } catch (err) {
+          console.warn('Could not enter fullscreen:', err);
+        }
       }
     } catch (error) {
       console.error('Error accessing quiz:', error);
@@ -179,7 +190,7 @@ const StudentDashboard = () => {
     }));
   };
 
-  const submitQuiz = async () => {
+  const submitQuiz = async (isTabViolation = false) => {
     if (!currentQuiz) return;
 
     setIsSubmitting(true);
@@ -196,28 +207,134 @@ const StudentDashboard = () => {
         `${API_BASE_URL}/quizzes/submit`,
         {
           quiz_id: currentQuiz._id,
-          answers: answers
+          answers: answers,
+          tab_violation: isTabViolation,
+          tab_switch_count: tabSwitchCountRef.current
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       setScore(response.data.score);
       setShowScore(true);
-      await fetchAttempts(); // Refresh attempts after submission
+      await fetchAttempts();
+
+      // If auto-submitted due to tab violation, exit fullscreen and go back
+      if (isTabViolation) {
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => { });
+        }
+        setError('Quiz auto-submitted due to tab switching violation.');
+        // Reset quiz state after a brief delay so student sees what happened
+        setTimeout(() => {
+          setCurrentQuiz(null);
+          setSelectedQuiz(null);
+          setScore(null);
+          setShowScore(false);
+          setShowTabWarning(false);
+          tabSwitchCountRef.current = 0;
+          isAutoSubmittingRef.current = false;
+        }, 2000);
+      }
     } catch (error) {
       console.error('Error submitting quiz:', error);
       setError(error.response?.data?.detail || 'Failed to submit quiz');
+      if (isTabViolation && document.fullscreenElement) {
+        document.exitFullscreen().catch(() => { });
+      }
     } finally {
       setIsSubmitting(false);
+      if (!isTabViolation) {
+        isAutoSubmittingRef.current = false;
+      }
     }
   };
+
+  // Keep ref in sync with the latest submitQuiz
+  useEffect(() => {
+    submitQuizRef.current = submitQuiz;
+  });
+
+  // Tab-switch & fullscreen-exit detection during quiz
+  useEffect(() => {
+    if (!currentQuiz || score !== null) return;
+
+    let lastViolationTime = 0;
+
+    const handleViolation = (reason) => {
+      if (isAutoSubmittingRef.current) return;
+
+      // Debounce: ignore violations within 500ms of each other
+      // (both visibilitychange and fullscreenchange can fire for one tab switch)
+      const now = Date.now();
+      if (now - lastViolationTime < 500) return;
+      lastViolationTime = now;
+
+      tabSwitchCountRef.current += 1;
+      console.log(`Tab violation #${tabSwitchCountRef.current}: ${reason}`);
+
+      if (tabSwitchCountRef.current === 1) {
+        // First violation — show warning
+        setShowTabWarning(true);
+      } else if (tabSwitchCountRef.current >= 2) {
+        // Second violation — auto-submit and go back
+        setShowTabWarning(false);
+        isAutoSubmittingRef.current = true;
+        if (submitQuizRef.current) {
+          submitQuizRef.current(true);
+        }
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        handleViolation('tab-switch');
+      }
+    };
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        handleViolation('fullscreen-exit');
+      }
+    };
+
+    const handleBlur = () => {
+      handleViolation('window-blur');
+    };
+
+    // Also block certain key combos
+    const handleKeyDown = (e) => {
+      // Block Alt+Tab hint, Cmd+Tab, etc. (we can't fully prevent OS-level, but we detect them)
+      if (e.altKey && e.key === 'Tab') {
+        e.preventDefault();
+        handleViolation('alt-tab');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [currentQuiz, score]);
 
   const backToQuizList = () => {
     setCurrentQuiz(null);
     setSelectedQuiz(null);
-
     setScore(null);
     setError('');
+    setShowTabWarning(false);
+    tabSwitchCountRef.current = 0;
+    isAutoSubmittingRef.current = false;
+    // Exit fullscreen if active
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => { });
+    }
   };
 
   if (error && !currentQuiz) {
@@ -364,7 +481,7 @@ const StudentDashboard = () => {
               ) : (
                 <button
                   className="submit-btn"
-                  onClick={submitQuiz}
+                  onClick={() => submitQuiz()}
                   disabled={Object.keys(selectedAnswers).length !== currentQuiz.questions.length || isSubmitting}
                 >
                   {isSubmitting ? 'Submitting...' : 'Submit Quiz'}
@@ -374,6 +491,30 @@ const StudentDashboard = () => {
           )}
         </div>
       </div>
+      {showTabWarning && (
+        <div className="tab-warning-backdrop">
+          <div className="tab-warning-modal">
+            <div className="tab-warning-icon">⚠️</div>
+            <h2>Warning: Tab Switch Detected!</h2>
+            <p>You switched away from the quiz or exited fullscreen. This has been recorded.</p>
+            <p className="tab-warning-bold">If you do this again, your quiz will be automatically submitted with your current answers and you will be redirected.</p>
+            <button
+              className="tab-warning-btn"
+              onClick={async () => {
+                setShowTabWarning(false);
+                // Re-enter fullscreen
+                try {
+                  await document.documentElement.requestFullscreen();
+                } catch (err) {
+                  console.warn('Could not re-enter fullscreen:', err);
+                }
+              }}
+            >
+              I Understand — Continue Quiz
+            </button>
+          </div>
+        </div>
+      )}
       {showBatchModal && (
         <div className="batch-modal-backdrop">
           <div className="batch-modal">

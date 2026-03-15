@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import './Login.css';
 import { API_BASE_URL } from '../../config';
+import { isTokenExpired, clearAuth } from '../../utils/tokenUtils';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -11,6 +12,14 @@ function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  // Clear any expired tokens on mount so we start fresh
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token && isTokenExpired(token)) {
+      clearAuth();
+    }
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

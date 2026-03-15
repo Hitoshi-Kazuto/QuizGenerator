@@ -1,34 +1,38 @@
 from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, HttpUrl
 from quiz_generator import QuizGenerator
+from database import Teacher, Student, Quiz, QuizAttempt, BATCH_CHOICES
+from auth import (
+    create_access_token,
+    get_current_teacher,
+    get_current_student,
+    authenticate_teacher,
+    authenticate_student,
+    ACCESS_TOKEN_EXPIRE_MINUTES
+)
 import PyPDF2
 import io
-import os
 from dotenv import load_dotenv
 from datetime import timedelta
-from typing import List, Optional, Dict, Any
-from bson import ObjectId
+from typing import List, Dict, Any, Optional
 import requests
 from bs4 import BeautifulSoup
 from newspaper import Article
 import nltk
+import ssl
+
+try:
+    _create_unverified_https_context = ssl._create_unverified_context
+except AttributeError:
+    pass
+else:
+    ssl._create_default_https_context = _create_unverified_https_context
 
 # Download required NLTK data
 nltk.download('punkt', quiet=True)
-
-# Import our modules
-from database import Teacher, Student, Quiz, QuizAttempt, BATCH_CHOICES
-from auth import (
-    create_access_token, 
-    get_current_teacher, 
-    get_current_student, 
-    authenticate_teacher, 
-    authenticate_student,
-    ACCESS_TOKEN_EXPIRE_MINUTES
-)
+nltk.download('punkt_tab', quiet=True)
 
 # Load environment variables
 load_dotenv()
@@ -122,6 +126,8 @@ class QuizAnswer(BaseModel):
 class QuizSubmission(BaseModel):
     quiz_id: str
     answers: List[QuizAnswer]
+    tab_violation: bool = False
+    tab_switch_count: int = 0
 
 class WebsiteRequest(BaseModel):
     url: HttpUrl
@@ -455,7 +461,9 @@ async def submit_quiz(submission: QuizSubmission, current_student: dict = Depend
         student_id=str(current_student["_id"]),
         quiz_id=submission.quiz_id,
         answers=answer_details,
-        score=score
+        score=score,
+        tab_violation=submission.tab_violation,
+        tab_switch_count=submission.tab_switch_count
     )
     
     return {
@@ -526,6 +534,36 @@ async def get_quiz_attempts(quiz_id: str, current_teacher: dict = Depends(get_cu
         attempt["quiz_id"] = str(attempt["quiz_id"])
     
     return attempts
+
+@app.delete("/quizzes/{quiz_id}/attempts/{attempt_id}")
+async def delete_quiz_attempt(
+    quiz_id: str,
+    attempt_id: str,
+    current_teacher: dict = Depends(get_current_teacher)
+):
+    # Verify the quiz belongs to this teacher
+    quiz = await Quiz.get_by_id(quiz_id)
+    if not quiz:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Quiz not found"
+        )
+    
+    if str(quiz["teacher_id"]) != str(current_teacher["_id"]):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to manage attempts for this quiz"
+        )
+    
+    # Delete the attempt
+    deleted = await QuizAttempt.delete_attempt(attempt_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attempt not found"
+        )
+    
+    return {"message": "Attempt reset successfully. The student can now reattempt this quiz."}
 
 @app.post("/scrape-website")
 async def scrape_website(request: WebsiteRequest):

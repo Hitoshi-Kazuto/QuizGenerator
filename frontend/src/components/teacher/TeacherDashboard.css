@@ -172,9 +172,20 @@
 }
 
 @keyframes pulse {
-  0% { opacity: 0.3; transform: scale(0.8); }
-  50% { opacity: 1; transform: scale(1.2); }
-  100% { opacity: 0.3; transform: scale(0.8); }
+  0% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
 }
 
 .chat-error {
@@ -1178,4 +1189,46 @@
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
-} 
+}
+
+/* Tab Violation Badge & Reset Attempt */
+.attempt-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.tab-violation-badge {
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(247, 37, 133, 0.12);
+  color: #d62f4b;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tab-switch-info {
+  color: #d97706;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.reset-attempt-btn {
+  margin-top: 1rem;
+  padding: 0.5rem 1.25rem;
+  border: 1px solid rgba(247, 37, 133, 0.3);
+  background: white;
+  color: #d62f4b;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.reset-attempt-btn:hover {
+  background: rgba(247, 37, 133, 0.08);
+  border-color: #d62f4b;
+}

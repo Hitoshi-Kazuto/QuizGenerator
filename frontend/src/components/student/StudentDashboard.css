@@ -395,7 +395,7 @@
 .try-again-btn:hover {
   background-color: var(--primary-dark);
   transform: translateY(-2px);
-} 
+}
 
 .badge {
   padding: 0.25rem 0.75rem;
@@ -483,4 +483,98 @@
 .primary-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Tab-Switch Warning Modal */
+.tab-warning-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  padding: 1rem;
+  backdrop-filter: blur(4px);
+}
+
+.tab-warning-modal {
+  background: white;
+  border-radius: 1rem;
+  padding: 2.5rem 2rem;
+  max-width: 460px;
+  width: 100%;
+  box-shadow: 0 25px 60px rgba(247, 37, 133, 0.3);
+  text-align: center;
+  border-top: 4px solid var(--danger);
+  animation: warningSlideIn 0.3s ease-out;
+}
+
+@keyframes warningSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.tab-warning-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  animation: warningPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes warningPulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.15);
+  }
+}
+
+.tab-warning-modal h2 {
+  color: var(--danger);
+  margin-bottom: 0.75rem;
+  font-size: 1.4rem;
+}
+
+.tab-warning-modal p {
+  color: var(--gray-600);
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+}
+
+.tab-warning-bold {
+  color: var(--gray-900) !important;
+  font-weight: 700;
+  margin-top: 0.75rem !important;
+}
+
+.tab-warning-btn {
+  margin-top: 1.5rem;
+  padding: 0.75rem 2rem;
+  background: linear-gradient(135deg, var(--danger), #d90429);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.tab-warning-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
 }

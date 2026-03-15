@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 from bson import ObjectId
@@ -6,7 +8,6 @@ from dotenv import load_dotenv
 import bcrypt
 import secrets
 import string
-import ssl
 
 
 load_dotenv()
@@ -206,12 +207,14 @@ class Quiz:
 # Quiz Attempt model
 class QuizAttempt:
     @staticmethod
-    async def create(student_id, quiz_id, answers, score):
+    async def create(student_id, quiz_id, answers, score, tab_violation=False, tab_switch_count=0):
         attempt = {
             "student_id": ObjectId(student_id),
             "quiz_id": ObjectId(quiz_id),
             "answers": answers,
             "score": score,
+            "tab_violation": tab_violation,
+            "tab_switch_count": tab_switch_count,
             "submitted_at": datetime.utcnow()
         }
         result = await attempts_collection.insert_one(attempt)
@@ -235,5 +238,7 @@ class QuizAttempt:
         cursor = attempts_collection.find({"quiz_id": ObjectId(quiz_id)})
         return await cursor.to_list(length=None)
 
-# Import datetime at the end to avoid circular imports
-from datetime import datetime 
+    @staticmethod
+    async def delete_attempt(attempt_id):
+        result = await attempts_collection.delete_one({"_id": ObjectId(attempt_id)})
+        return result.deleted_count > 0
