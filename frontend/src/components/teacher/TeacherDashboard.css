@@ -402,6 +402,43 @@
   flex-wrap: wrap;
 }
 
+/* Question count pill selector */
+.num-q-chips {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.num-q-chip {
+  width: 42px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(82, 97, 148, 0.25);
+  background: white;
+  color: #4a5167;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.num-q-chip:hover {
+  border-color: #6c63ff;
+  color: #6c63ff;
+}
+
+.num-q-chip.selected {
+  background: linear-gradient(135deg, #6c63ff, #42a5f5);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.3);
+}
+
+.num-q-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
 .ghost-btn {
   border-radius: 999px;
   border: 1px solid rgba(82, 97, 148, 0.25);

@@ -12,7 +12,92 @@ class QuizGenerator:
         )
         self.model = "Qwen/Qwen3-8B"
 
-    def generate_quiz_prompt(self, quiz_type: str, difficulty: str = 'medium'):
+    # ------------------------------------------------------------------
+    # Input quality validation
+    # ------------------------------------------------------------------
+
+    def validate_input_quality(self) -> dict:
+        """
+        Quick two-pass validation:
+        1. Rule-based: too short or gibberish → immediate reject.
+        2. LLM-based: borderline → ask the model.
+        Returns {"valid": bool, "message": str}
+        """
+        text = self.text.strip()
+
+        # Pass 1 — rule-based checks
+        if len(text) < 80:
+            return {
+                "valid": False,
+                "message": (
+                    "The provided notes are too short to generate meaningful questions. "
+                    "Please provide at least a paragraph of content about the topic."
+                ),
+            }
+
+        # Count distinct words — single repeated word or pure numbers → reject
+        words = re.findall(r"[a-zA-Z]+", text.lower())
+        if len(words) < 15:
+            return {
+                "valid": False,
+                "message": (
+                    "The provided text doesn't contain enough educational content. "
+                    "Please paste your notes or a description of the topic you want to quiz on."
+                ),
+            }
+
+        unique_ratio = len(set(words)) / len(words) if words else 0
+        if unique_ratio < 0.2:
+            return {
+                "valid": False,
+                "message": (
+                    "The text appears to be repetitive or lacks variety. "
+                    "Please provide detailed notes with proper content."
+                ),
+            }
+
+        # Pass 2 — LLM quality check for borderline cases (< 300 chars)
+        if len(text) < 300:
+            try:
+                check_prompt = (
+                    "You are an educational content validator. "
+                    "Analyse the following text and respond with ONLY a JSON object: "
+                    '{"suitable": true/false, "reason": "one short sentence"}. '
+                    "A text is suitable if it contains enough factual/educational information "
+                    "to generate at least 5 meaningful quiz questions about a specific topic. "
+                    f"\n\nTEXT:\n{text}"
+                )
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": check_prompt}],
+                    temperature=0.0,
+                    max_tokens=100,
+                )
+                raw = response.choices[0].message.content.strip()
+                # Extract JSON from response
+                json_match = re.search(r'\{.*\}', raw, re.DOTALL)
+                if json_match:
+                    result = json.loads(json_match.group(0))
+                    if not result.get("suitable", True):
+                        reason = result.get("reason", "")
+                        return {
+                            "valid": False,
+                            "message": (
+                                f"The content doesn't seem sufficient for quiz generation. "
+                                f"{reason} Please provide more detailed notes."
+                            ),
+                        }
+            except Exception as e:
+                print(f"Input quality LLM check failed (skipping): {e}")
+                # If the LLM check fails, be lenient and continue
+
+        return {"valid": True, "message": ""}
+
+    # ------------------------------------------------------------------
+    # Quiz generation
+    # ------------------------------------------------------------------
+
+    def generate_quiz_prompt(self, quiz_type: str, difficulty: str = 'medium', num_questions: int = 10):
         type_specific_instructions = {
             "mcq": """
             - Generate ONLY Multiple Choice Questions with ONE correct answer
@@ -60,7 +145,7 @@ class QuizGenerator:
         {self.text}
 
         INSTRUCTIONS:
-        1. Generate exactly 10 questions based on the text above.
+        1. Generate exactly {num_questions} questions based on the text above.
         2. Each question MUST follow this EXACT format:
            {{
              "text": "Question text here",
@@ -168,10 +253,19 @@ class QuizGenerator:
         print(f"Validated {len(validated_questions)} questions out of {len(questions)}")
         return validated_questions
 
-    def generate_quiz(self, quiz_type: str = 'mcq', difficulty: str = 'medium'):
-        prompt = self.generate_quiz_prompt(quiz_type, difficulty)
+    def generate_quiz(self, quiz_type: str = 'mcq', difficulty: str = 'medium', num_questions: int = 10):
+        # Validate num_questions
+        if num_questions not in [10, 15, 20]:
+            num_questions = 10
+
+        # Validate input quality first
+        quality_check = self.validate_input_quality()
+        if not quality_check["valid"]:
+            return [], quality_check["message"]
+
+        prompt = self.generate_quiz_prompt(quiz_type, difficulty, num_questions)
         try:
-            print(f"Generating quiz with type: {quiz_type} and difficulty: {difficulty}")
+            print(f"Generating quiz with type: {quiz_type}, difficulty: {difficulty}, num_questions: {num_questions}")
             print(f"Input text length: {len(self.text)}")
             print(f"Using model: {self.model}")
 
@@ -188,7 +282,7 @@ class QuizGenerator:
                     }
                 ],
                 temperature=0.7,
-                max_tokens=4096,
+                max_tokens=6000,
             )
 
             response_text = response.choices[0].message.content
@@ -199,11 +293,102 @@ class QuizGenerator:
             validated_questions = self.validate_questions(questions)
 
             if validated_questions:
-                return validated_questions
+                return validated_questions, None
 
             print("Failed to generate valid questions.")
-            return []
+            return [], "Failed to generate valid questions from your content. Please try again."
 
         except Exception as e:
             print(f"Error in quiz generation: {e}")
-            return []
+            return [], str(e)
+
+    # ------------------------------------------------------------------
+    # Flashcard generation
+    # ------------------------------------------------------------------
+
+    def generate_flashcards_prompt(self, num_cards: int = 8) -> str:
+        return f"""
+        You are a flashcard generator for students. Based on the following notes/text, create {num_cards} flashcards
+        that help students revise and understand key concepts.
+
+        TEXT:
+        {self.text}
+
+        INSTRUCTIONS:
+        - Extract the most important concepts, terms, definitions, or facts from the text.
+        - Each flashcard should have a concise "term" (front of card) and a clear "definition" (back of card).
+        - The definition should be self-contained and easy to understand.
+        - Vary the card types: some can be term→definition, some can be concept→explanation, some can be question→answer.
+        - Return ONLY a JSON array with no additional text.
+
+        OUTPUT FORMAT:
+        [
+          {{
+            "term": "Short term or question",
+            "definition": "Clear, concise explanation or answer (1-3 sentences max)"
+          }},
+          ...
+        ]
+
+        IMPORTANT:
+        - Generate exactly {num_cards} flashcards
+        - Do NOT wrap the JSON in markdown code fences
+        - Ensure JSON is valid and properly escaped
+        """
+
+    def generate_flashcards(self, num_cards: int = 8):
+        """
+        Generate flashcards from the text.
+        Returns (cards_list, error_message).
+        error_message is None on success.
+        """
+        # Validate num_cards
+        num_cards = max(5, min(10, num_cards))
+
+        # Validate input quality
+        quality_check = self.validate_input_quality()
+        if not quality_check["valid"]:
+            return [], quality_check["message"]
+
+        prompt = self.generate_flashcards_prompt(num_cards)
+        try:
+            print(f"Generating {num_cards} flashcards. Input length: {len(self.text)}")
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a flashcard generator that outputs ONLY valid JSON arrays. No markdown, no explanations, just the JSON array."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.6,
+                max_tokens=3000,
+            )
+
+            response_text = response.choices[0].message.content
+            print("Flashcard raw response:", response_text[:200] + "..." if len(response_text) > 200 else response_text)
+
+            # Parse response
+            json_match = re.search(r'\[\s*\{.*\}\s*\]', response_text, re.DOTALL)
+            if json_match:
+                cards = json.loads(json_match.group(0))
+                # Validate structure
+                valid_cards = [
+                    c for c in cards
+                    if isinstance(c, dict) and "term" in c and "definition" in c
+                    and c["term"].strip() and c["definition"].strip()
+                ]
+                if valid_cards:
+                    print(f"Generated {len(valid_cards)} valid flashcards")
+                    return valid_cards, None
+
+            return [], "Could not generate flashcards from the provided content. Please try with more detailed notes."
+
+        except Exception as e:
+            print(f"Error generating flashcards: {e}")
+            return [], str(e)

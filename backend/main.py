@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, status
+from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, HttpUrl
@@ -10,10 +10,13 @@ from auth import (
     get_current_student,
     authenticate_teacher,
     authenticate_student,
-    ACCESS_TOKEN_EXPIRE_MINUTES
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    verify_token,
 )
+import playground as pg
 import PyPDF2
 import io
+import json
 from dotenv import load_dotenv
 from datetime import timedelta
 from typing import List, Dict, Any, Optional
@@ -90,6 +93,20 @@ class QuizRequest(BaseModel):
     text: str
     quiz_type: str = 'mcq'
     difficulty: str = 'medium'
+    num_questions: int = 10
+
+class FlashcardRequest(BaseModel):
+    text: str
+    num_cards: int = 8
+
+class PlaygroundCreateRequest(BaseModel):
+    pass  # auth via header; room_id auto-generated
+
+class PlaygroundFinalizeRequest(BaseModel):
+    room_id: str
+    title: str
+    description: str = ''
+    batches: List[str] = []
 
 class TeacherCreate(BaseModel):
     email: EmailStr
@@ -242,29 +259,325 @@ async def generate_quiz(request: QuizRequest):
     print(f"Text length: {len(request.text)}")
     print(f"Quiz type: {request.quiz_type}")
     print(f"Difficulty: {request.difficulty}")
-    
+    print(f"Num questions: {request.num_questions}")
+
+    # Validate num_questions
+    if request.num_questions not in [10, 15, 20]:
+        return {"questions": [], "error": "num_questions must be 10, 15, or 20"}
+
     # Validate text
     if not request.text or not request.text.strip():
         print("Empty text received")
         return {"questions": [], "error": "Text cannot be empty"}
-    
+
     # Clean and prepare text
     cleaned_text = request.text.strip()
-    
+
     try:
         generator = QuizGenerator(cleaned_text)
-        questions = generator.generate_quiz(request.quiz_type, request.difficulty)
-        
+        questions, error_msg = generator.generate_quiz(
+            request.quiz_type, request.difficulty, request.num_questions
+        )
+
         print(f"Generated questions: {len(questions)}")
-        
+
         if not questions:
-            print("No questions were generated. Returning empty array.")
-            return {"questions": [], "error": "No questions could be generated from the provided text"}
-        
+            print("No questions were generated.")
+            return {
+                "questions": [],
+                "error": error_msg or "No questions could be generated from the provided text",
+            }
+
         return {"questions": questions}
     except Exception as e:
         print(f"Error in generate_quiz endpoint: {e}")
         return {"questions": [], "error": str(e)}
+
+
+@app.post("/generate-flashcards")
+async def generate_flashcards(request: FlashcardRequest):
+    """Generate AI flashcards from student notes."""
+    if not request.text or not request.text.strip():
+        return {"flashcards": [], "error": "Text cannot be empty"}
+
+    num_cards = max(5, min(10, request.num_cards))
+    cleaned_text = request.text.strip()
+
+    try:
+        generator = QuizGenerator(cleaned_text)
+        cards, error_msg = generator.generate_flashcards(num_cards)
+
+        if not cards:
+            return {
+                "flashcards": [],
+                "error": error_msg or "Could not generate flashcards from the provided content",
+            }
+
+        return {"flashcards": cards}
+    except Exception as e:
+        print(f"Error in generate_flashcards endpoint: {e}")
+        return {"flashcards": [], "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Playground endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/playground/create")
+async def create_playground_room(current_teacher: dict = Depends(get_current_teacher)):
+    """Create a new collaborative playground room."""
+    teacher_id = str(current_teacher["_id"])
+    teacher_name = current_teacher["name"]
+    room_id = pg.create_room(teacher_id, teacher_name)
+    return {"room_id": room_id, "message": f"Room {room_id} created. Share this code with other teachers."}
+
+
+@app.get("/playground/{room_id}/info")
+async def get_playground_info(room_id: str, current_teacher: dict = Depends(get_current_teacher)):
+    """Get current room state (REST fallback / initial load)."""
+    room = pg.get_room(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room.to_state()
+
+
+@app.post("/playground/finalize")
+async def finalize_playground_quiz(
+    body: PlaygroundFinalizeRequest,
+    current_teacher: dict = Depends(get_current_teacher),
+):
+    """Save the selected playground questions as a proper Quiz document."""
+    room = pg.get_room(body.room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    teacher_id = str(current_teacher["_id"])
+    teacher_batches = set(current_teacher.get("batches", []))
+
+    normalized_batches = normalize_batches(body.batches)
+    if not set(normalized_batches).issubset(teacher_batches):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only share quizzes with batches assigned to you",
+        )
+
+    selected_qs = room.get_selected_questions()
+    if not selected_qs:
+        raise HTTPException(status_code=400, detail="No questions selected for the quiz")
+
+    # Strip playground-specific fields before saving
+    clean_questions = []
+    for q in selected_qs:
+        cq = {
+            "text": q["text"],
+            "type": q["type"],
+            "difficulty": q.get("difficulty", "medium"),
+            "options": q["options"],
+        }
+        if "correct_answer" in q:
+            cq["correct_answer"] = q["correct_answer"]
+        if "correct_answers" in q:
+            cq["correct_answers"] = q["correct_answers"]
+        clean_questions.append(cq)
+
+    quiz_type = clean_questions[0].get("type", "mcq") if clean_questions else "mcq"
+
+    new_quiz = await Quiz.create(
+        teacher_id=teacher_id,
+        title=body.title,
+        description=body.description,
+        questions=clean_questions,
+        quiz_type=quiz_type,
+        batches=normalized_batches,
+    )
+
+    # Broadcast quiz_finalized to all room participants
+    await pg.broadcast(room, {
+        "event": "quiz_finalized",
+        "data": {
+            "quiz_id": str(new_quiz["_id"]),
+            "access_code": new_quiz["access_code"],
+            "title": body.title,
+        },
+    })
+
+    return {
+        "message": "Playground quiz saved successfully",
+        "quiz_id": str(new_quiz["_id"]),
+        "access_code": new_quiz["access_code"],
+    }
+
+
+@app.websocket("/playground/ws/{room_id}")
+async def playground_ws(websocket: WebSocket, room_id: str):
+    """
+    WebSocket endpoint for the collaborative playground.
+    Authentication: first message must be { "event": "join", "token": "<jwt>" }
+    """
+    await websocket.accept()
+    teacher_id: Optional[str] = None
+    teacher_name: Optional[str] = None
+    room: Optional[pg.PlaygroundRoom] = None
+
+    try:
+        # ----------------------------------------------------------------
+        # Auth handshake — first message must be join
+        # ----------------------------------------------------------------
+        raw = await websocket.receive_text()
+        msg = json.loads(raw)
+
+        if msg.get("event") != "join" or not msg.get("token"):
+            await websocket.send_json({"event": "error", "data": "First message must be a join event with a token"})
+            await websocket.close()
+            return
+
+        # Verify token
+        try:
+            payload = verify_token(msg["token"])
+            if payload.get("type") != "teacher":
+                raise ValueError("Not a teacher token")
+            teacher_id = payload["sub"]
+        except Exception:
+            await websocket.send_json({"event": "error", "data": "Invalid or expired token"})
+            await websocket.close()
+            return
+
+        # Look up teacher name
+        teacher_doc = await Teacher.get_by_id(teacher_id)
+        if not teacher_doc:
+            await websocket.send_json({"event": "error", "data": "Teacher not found"})
+            await websocket.close()
+            return
+        teacher_name = teacher_doc["name"]
+
+        # Get or create room
+        room = pg.get_room(room_id)
+        if not room:
+            await websocket.send_json({"event": "error", "data": f"Room {room_id} not found"})
+            await websocket.close()
+            return
+
+        # Register connection
+        room.ensure_teacher(teacher_id, teacher_name)
+        room.connections[teacher_id] = websocket
+
+        # Send full state to joining teacher
+        await websocket.send_json({"event": "room_state", "data": room.to_state()})
+
+        # Notify others
+        await pg.broadcast(room, {
+            "event": "teacher_joined",
+            "data": {"id": teacher_id, "name": teacher_name},
+        })
+
+        # ----------------------------------------------------------------
+        # Main message loop
+        # ----------------------------------------------------------------
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                await websocket.send_json({"event": "error", "data": "Invalid JSON"})
+                continue
+
+            event = msg.get("event", "")
+            data = msg.get("data", {})
+
+            # --- add_text ---
+            if event == "add_text":
+                text = (data.get("text") or "").strip()
+                if not text:
+                    await websocket.send_json({"event": "error", "data": "Text cannot be empty"})
+                    continue
+                room.add_contribution(teacher_id, teacher_name, text)
+                await pg.broadcast_state(room)
+
+            # --- generate ---
+            elif event == "generate":
+                if room._generating:
+                    await websocket.send_json({"event": "error", "data": "Generation already in progress"})
+                    continue
+                if not room.combined_text:
+                    await websocket.send_json({"event": "error", "data": "No text contributed yet"})
+                    continue
+
+                room._generating = True
+                quiz_type = data.get("quiz_type", "mcq")
+                difficulty = data.get("difficulty", "medium")
+                num_questions = int(data.get("num_questions", 10))
+
+                await pg.broadcast(room, {"event": "generating", "data": {"message": "AI is generating questions..."}})
+
+                try:
+                    generator = QuizGenerator(room.combined_text)
+                    questions, err = generator.generate_quiz(quiz_type, difficulty, num_questions)
+                    if questions:
+                        room.add_generated_questions(questions, teacher_id, teacher_name)
+                        await pg.broadcast(room, {
+                            "event": "questions_generated",
+                            "data": {"count": len(questions)},
+                        })
+                    else:
+                        await pg.broadcast(room, {
+                            "event": "error",
+                            "data": err or "Generation failed",
+                        })
+                except Exception as e:
+                    await pg.broadcast(room, {"event": "error", "data": str(e)})
+                finally:
+                    room._generating = False
+
+                await pg.broadcast_state(room)
+
+            # --- toggle_question ---
+            elif event == "toggle_question":
+                q_id = data.get("question_id")
+                if q_id:
+                    selected = room.toggle_question(q_id)
+                    await pg.broadcast(room, {
+                        "event": "question_toggled",
+                        "data": {"question_id": q_id, "selected": selected},
+                    })
+                    await pg.broadcast_state(room)
+
+            # --- remove_question ---
+            elif event == "remove_question":
+                q_id = data.get("question_id")
+                if q_id:
+                    room.remove_question(q_id)
+                    await pg.broadcast_state(room)
+
+            # --- add_custom_question ---
+            elif event == "add_custom_question":
+                question = data.get("question")
+                if not question or not question.get("text"):
+                    await websocket.send_json({"event": "error", "data": "Question text is required"})
+                    continue
+                q_id = room.add_custom_question(question, teacher_id, teacher_name)
+                await pg.broadcast(room, {
+                    "event": "custom_question_added",
+                    "data": {"question_id": q_id, "added_by": teacher_name},
+                })
+                await pg.broadcast_state(room)
+
+            else:
+                await websocket.send_json({"event": "error", "data": f"Unknown event: {event}"})
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"Playground WS error: {e}")
+    finally:
+        if room and teacher_id:
+            room.remove_teacher(teacher_id)
+            await pg.broadcast(room, {
+                "event": "teacher_left",
+                "data": {"id": teacher_id, "name": teacher_name},
+            })
+            # Clean up empty rooms
+            if not room.teachers:
+                pg.delete_room(room_id)
 
 @app.post("/quizzes")
 async def create_quiz(quiz: QuizCreate, current_teacher: dict = Depends(get_current_teacher)):

@@ -4,6 +4,7 @@ import axios from 'axios';
 import './StudentDashboard.css';
 import { API_BASE_URL } from '../../config';
 import { isTokenExpired, clearAuth } from '../../utils/tokenUtils';
+import Flashcards from './Flashcards';
 const BATCHES = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9'];
 
 const StudentDashboard = () => {
@@ -25,6 +26,7 @@ const StudentDashboard = () => {
   const [isUpdatingBatch, setIsUpdatingBatch] = useState(false);
   const [batchModalError, setBatchModalError] = useState('');
   const [showTabWarning, setShowTabWarning] = useState(false);
+  const [activeView, setActiveView] = useState('quizzes'); // 'quizzes' | 'flashcards'
   const tabSwitchCountRef = useRef(0);
   const isAutoSubmittingRef = useRef(false);
   const submitQuizRef = useRef(null);
@@ -356,7 +358,21 @@ const StudentDashboard = () => {
     <>
       <div className="student-dashboard">
         <nav className="dashboard-nav">
-          <h1>TestifyAI - Student Dashboard</h1>
+          <div className="nav-brand">TestifyAI</div>
+          <div className="nav-tabs">
+            <button
+              className={`nav-tab ${activeView === 'quizzes' ? 'active' : ''}`}
+              onClick={() => setActiveView('quizzes')}
+            >
+              📝 Quizzes
+            </button>
+            <button
+              className={`nav-tab ${activeView === 'flashcards' ? 'active' : ''}`}
+              onClick={() => setActiveView('flashcards')}
+            >
+              🃏 Flashcards
+            </button>
+          </div>
           <div className="user-info">
             {user && (
               <>
@@ -371,7 +387,10 @@ const StudentDashboard = () => {
           </div>
         </nav>
         <div className="dashboard-content">
-          {!currentQuiz ? (
+          {activeView === 'flashcards' ? (
+            <Flashcards />
+          ) : (
+          !currentQuiz ? (
             <div className="quiz-list-section">
               <h2>Available Quizzes</h2>
 
@@ -488,7 +507,7 @@ const StudentDashboard = () => {
                 </button>
               )}
             </div>
-          )}
+          ))}
         </div>
       </div>
       {showTabWarning && (

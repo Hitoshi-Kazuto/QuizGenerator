@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import XLSX from 'xlsx-js-style';
 import { API_BASE_URL } from '../../config';
 import { isTokenExpired, clearAuth } from '../../utils/tokenUtils';
+import Playground from './Playground';
 import './TeacherDashboard.css';
 
 const BATCHES = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9'];
@@ -39,6 +40,7 @@ function TeacherDashboard() {
   const [batchModalSelection, setBatchModalSelection] = useState([]);
   const [isUpdatingBatches, setIsUpdatingBatches] = useState(false);
   const [batchModalError, setBatchModalError] = useState('');
+  const [numQuestions, setNumQuestions] = useState(10);
 
   const fetchTeacherProfile = useCallback(async () => {
     try {
@@ -151,7 +153,8 @@ function TeacherDashboard() {
       const response = await axios.post(`${API_BASE_URL}/generate-quiz`, {
         text: text,
         quiz_type: quizType,
-        difficulty: quizDifficulty
+        difficulty: quizDifficulty,
+        num_questions: numQuestions,
       });
 
       if (!response.data.questions || response.data.questions.length === 0) {
@@ -566,6 +569,12 @@ function TeacherDashboard() {
           >
             Saved Quizzes
           </button>
+          <button
+            className={`sidebar-link ${activeSection === 'playground' ? 'active' : ''}`}
+            onClick={() => setActiveSection('playground')}
+          >
+            🧑‍🏫 Playground
+          </button>
         </div>
         <div className="sidebar-footer">
           <button onClick={openBatchModal} className="sidebar-manage">
@@ -699,6 +708,22 @@ function TeacherDashboard() {
                         <option value="medium">Medium</option>
                         <option value="hard">Hard</option>
                       </select>
+                    </label>
+                    <label>
+                      Questions
+                      <div className="num-q-chips">
+                        {[10, 15, 20].map(n => (
+                          <button
+                            key={n}
+                            type="button"
+                            className={`num-q-chip ${numQuestions === n ? 'selected' : ''}`}
+                            onClick={() => setNumQuestions(n)}
+                            disabled={isLoading}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </div>
                     </label>
                   </div>
                   <div className="chat-footer-actions">
@@ -892,6 +917,9 @@ function TeacherDashboard() {
               </div>
             )}
           </section>
+        )}
+        {activeSection === 'playground' && (
+          <Playground />
         )}
       </main>
 

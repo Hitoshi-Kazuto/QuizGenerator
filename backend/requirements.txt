@@ -1,7 +1,7 @@
 fastapi==0.104.1
 gunicorn==21.2.0
 beautifulsoup4==4.12.2
-uvicorn==0.23.2
+uvicorn[standard]==0.23.2
 python-dotenv==1.0.0
 openai>=1.0.0
 PyPDF2==3.0.1
@@ -17,3 +17,4 @@ nltk==3.8.1
 pydantic>=2.5.0
 pydantic[email]>=2.5.0
 lxml[html_clean]
+websockets>=12.0

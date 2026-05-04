@@ -33,6 +33,21 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+
+def verify_token(token: str) -> dict:
+    """
+    Synchronous JWT verification (for WebSocket auth).
+    Raises JWTError on invalid/expired tokens.
+    Returns the decoded payload dict.
+    """
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    user_id: str = payload.get("sub")
+    user_type: str = payload.get("type")
+    if not user_id or not user_type:
+        from jose import JWTError
+        raise JWTError("Missing sub or type claim")
+    return payload
+
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
